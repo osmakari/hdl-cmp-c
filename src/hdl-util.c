@@ -80,7 +80,6 @@ int HDL_BitmapFromBMP (const char *filename, struct HDL_Bitmap *bitmap) {
     // Buffer to combine path and filename for relative paths
     char buff[256];
     sprintf(buff, "%s%s", input_file_path, filename);
-    printf("Concatted: %s\n", buff);
     FILE *file = fopen(buff, "r");
 
     if(file == NULL) {
@@ -123,7 +122,7 @@ int HDL_BitmapFromBMP (const char *filename, struct HDL_Bitmap *bitmap) {
     fseek(file, bmp_header.fileHeader.pixelOffset, SEEK_SET);
     for(int i = bitmap->height - 1; i > 0; i--) {
         fread(bitmap->data + (row_l * i), 1, row_l, file);
-        
+
         // Invert color
         for(int x = 0; x < row_l; x++) {
             (bitmap->data + (row_l * i))[x] = ~(bitmap->data + (row_l * i))[x];
