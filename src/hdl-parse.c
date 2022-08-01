@@ -271,7 +271,7 @@ int _HDL_ParseDataToBlocks (char *data) {
                 // Set null terminator
                 data_buffer[dbi++] = 0;
 
-                if(blocks_allocated - 1 <= block_count) {
+                if(blocks_allocated - 2 <= block_count) {
                     // Reallocate blocks
                     blocks_allocated += HDL_BLOCKBUFFER_REALLOC_SIZE;
                     blocks = realloc(blocks, sizeof(char*) * blocks_allocated);
@@ -649,7 +649,6 @@ int _HDL_ParseImage (struct HDL_Document *doc, int *blockIndex) {
         printf("Missing parenthesis while defining image\r\n");
         return 1;
     }
-
     bmp->size = (bmp->width * bmp->height)/8;
     // Allocate and zero data buffer
     bmp->data = malloc(bmp->size);

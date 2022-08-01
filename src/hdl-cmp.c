@@ -665,9 +665,9 @@ int main (int argc, char *argv[]) {
     free(buffer);
 
     // Detect format from file extension
-    if(argf_format == HDL_COMPILER_OUTPUT_FORMAT_UNKNOWN) {
+    if(argf_format == HDL_COMPILER_OUTPUT_FORMAT_UNKNOWN && argf_fpath != NULL) {
         char *extension = NULL;
-        char *inputFile = (char*)argf_fpath;
+        char *inputFile = argf_fpath;
         for(int i = strlen(inputFile) - 1; i > 0; i--) {
             if(inputFile[i] == '.') {
                 extension = (char*)inputFile + i;
