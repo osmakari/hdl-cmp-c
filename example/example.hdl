@@ -1,3 +1,12 @@
+#img TEST_IMG "test_img.bmp"
+#img TEST_IMG_INT (13, 5)
+    1111111111111
+    1001100000011
+    1001100000011
+    1001100000011
+    1111111111111
+;
+
 <box flexdir="row">
     <box flex=1>
         abcdefghijklm\n
@@ -8,5 +17,13 @@
         abcdefghijklm\n
         nopqrstuvwxyz\n
         1234567890\n
+    </box>
+    <box flexdir="col">
+        <box img=TEST_IMG>
+
+        </box>
+        <box img=TEST_IMG_INT size=2>
+
+        </box>
     </box>
 </box>

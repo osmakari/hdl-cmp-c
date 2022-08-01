@@ -3,6 +3,7 @@
 #include <string.h>
 #include "hdl-parse.h"
 #include <math.h>
+#include "hdl-cmp.h"
 
 // Unknown file format
 #define HDL_COMPILER_OUTPUT_FORMAT_UNKNOWN 0xFF
@@ -17,6 +18,9 @@
 
 #define HDL_COMPILER_VERSION_MAJOR  0
 #define HDL_COMPILER_VERSION_MINOR  1
+
+// Input file path
+char input_file_path[128];
 
 const char *tagnames[] = {
     "box",
@@ -615,6 +619,14 @@ int main (int argc, char *argv[]) {
         printf("Error: Expected an input file\r\n");
         return 1;
     }
+    input_file_path[0] = 0;
+    // Set filename path
+    for(int i = strlen(filename) - 1; i > 0; i--) {
+        if(filename[i] == '/') {
+            memcpy(input_file_path, filename, i + 1);
+            input_file_path[i + 1] = 0;
+        }
+    }
     
     FILE *f = fopen(filename, "r");
 
@@ -660,6 +672,9 @@ int main (int argc, char *argv[]) {
     }
     else {
         printf("Parse failed\r\n");
+        free(buffer);
+
+        return 1;
     }
 
     free(buffer);

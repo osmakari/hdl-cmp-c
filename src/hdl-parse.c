@@ -2,6 +2,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include "hdl-parse.h"
+#include <math.h>
+#include "hdl-util.h"
 
 // Number of bytes to reallocate if out of memory
 #define HDL_DATABUFFER_REALLOC_SIZE     256
@@ -53,6 +55,7 @@ static const char delimiters[] = {
     '<',    // Tag start
     '>',    // Tag end
     '/',    // Short tag delimiter 
+    '*',    // Comment delimiter
     '=',    // Delimiter for attributes
     '[',    // Delimiter for array start
     ']',    // Delimiter for array end
@@ -573,6 +576,7 @@ int _HDL_ParseAttribute (struct HDL_Document *doc, struct HDL_Element *element, 
     }
     
     struct HDL_Attr *attr = &element->attrs[element->attrCount++];
+    memset(attr, 0, sizeof(struct HDL_Attr));
 
     // Read attribute key
     strcpy(attr->key, blocks[*blockIndex]);
@@ -594,7 +598,7 @@ int _HDL_ParseAttribute (struct HDL_Document *doc, struct HDL_Element *element, 
     if(blocks[*blockIndex][0] == '=') {
         (*blockIndex)++;
         if(_HDL_ParseValue(doc, blockIndex, &attr->count, &attr->type, &attr->value)) {
-
+            
             return 1;
         }
     }
@@ -604,6 +608,14 @@ int _HDL_ParseAttribute (struct HDL_Document *doc, struct HDL_Element *element, 
     }
 
     return 0;
+}
+
+int _HDL_ParseImageFromPath (struct HDL_Bitmap *bmp, struct HDL_Document *doc, int *blockIndex) {
+    // Remove quotes
+    char nbuff[128];
+    strcpy(nbuff, blocks[*blockIndex] + 1);
+    nbuff[strlen(nbuff) - 1] = 0;
+    return HDL_BitmapFromBMP(nbuff, bmp);
 }
 
 int _HDL_ParseImage (struct HDL_Document *doc, int *blockIndex) {
@@ -625,9 +637,13 @@ int _HDL_ParseImage (struct HDL_Document *doc, int *blockIndex) {
     bmp->colorMode = HDL_COLORS_MONO;
     (*blockIndex)++;
 
+    // Expecting image name
+    if(blocks[*blockIndex][0] == '"') {
+        return _HDL_ParseImageFromPath(bmp, doc, blockIndex);
+    }
     // Expecting parenthesis with width, height inside
-    if(blocks[*blockIndex][0] != '(') {
-        printf("(width, height) expected while defining image\r\n");
+    else if(blocks[*blockIndex][0] != '(') {
+        printf("(width, height) or image path expected while defining image\r\n");
         return 1;
     }
     // Width
@@ -649,14 +665,17 @@ int _HDL_ParseImage (struct HDL_Document *doc, int *blockIndex) {
         printf("Missing parenthesis while defining image\r\n");
         return 1;
     }
-    bmp->size = (bmp->width * bmp->height)/8;
+    bmp->size = (bmp->width + 7)/8 * bmp->height;
     // Allocate and zero data buffer
     bmp->data = malloc(bmp->size);
     memset(bmp->data, 0, bmp->size);
 
     (*blockIndex)++;
 
-    int px = 0;
+    int y = 0;
+    int x = 0;
+    int pad_width = (bmp->width + 7) / 8;
+    // Start reading image data until semicolon
     while((*blockIndex) < block_count) {
 
         if(blocks[*blockIndex][0] == ';') {
@@ -665,30 +684,35 @@ int _HDL_ParseImage (struct HDL_Document *doc, int *blockIndex) {
         }
         char *block = blocks[*blockIndex];
         int len = strlen(block);
+        
         for(int i = 0; i < len; i++) {
 
-            if(px/8 > bmp->size) {
-                printf("ERROR: Image data overflow\r\n");
+            if(y * pad_width + x / 8 >= bmp->size) {
+                printf("ERROR: Image data overflow %i\r\n", bmp->size);
                 return 1;
             }
+            
             if(block[i] == '1') {
-                bmp->data[px/8] |= 1 << (7 - (px % 8));
-                px++;
+                bmp->data[y * pad_width + x / 8] |= 1 << (7 - (x % 8));
             }
             else if(block[i] == '0') {
-                px++;
+                
             }
             else {
                 printf("ERROR: Expected ; after image data\r\n");
                 return 1;
             }
+            x++;
+            if(x >= bmp->width) {
+                x = 0;
+                y++;
+            }
         }
 
         (*blockIndex)++;
     }
-    printf("Bitmap '%s' built (Pixels: %i/%i)\r\n", bmp->name, px, bmp->size * 8);
-    
-    // Start reading image data until semicolon
+
+    printf("Bitmap '%s' built\r\n", bmp->name);
 
     return 0;
 }
@@ -949,6 +973,13 @@ int _HDL_ParseBlocks (struct HDL_Document *doc) {
             if(err) {
                 printf("Error while parsing elements\r\n");
                 break;
+            }
+        }
+        else if(blocks[blockIndex][0] == '/' && blocks[blockIndex][1] == '*') {
+            // Comment
+            while(blockIndex < block_count && (blocks[blockIndex][0] != '*' && blocks[blockIndex][1] == '/')) {
+                // Wait until out of comment
+                blockIndex++;
             }
         }
         else {
