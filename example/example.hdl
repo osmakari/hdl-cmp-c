@@ -1,11 +1,12 @@
 #img TEST_IMG "test_img.bmp"
-#img TEST_IMG_INT (13, 5)
+#img TEST_IMG_INT (14, 5)
     1111111111111
     1001100000011
     1001100000011
     1001100000011
     1111111111111
 ;
+#img TEST_SPRITE (0, 0, 24, 24) "kb-icons.bmp"
 
 <box flexdir="row">
     <box flex=1>
@@ -13,10 +14,8 @@
         nopqrstuvwxyz\n
         1234567890\n
     </box>
-    <box flex=1 size=2>
-        abcdefghijklm\n
-        nopqrstuvwxyz\n
-        1234567890\n
+    <box img=TEST_SPRITE sprite=11 flex=1 size=1>
+        
     </box>
     <box flexdir="col">
         <box img=TEST_IMG>

@@ -96,6 +96,8 @@ struct HDL_Bitmap {
     uint16_t size;
     uint16_t width;
     uint16_t height;
+    uint8_t sprite_width;
+    uint8_t sprite_height;
     uint8_t colorMode;
     uint8_t *data;
 };

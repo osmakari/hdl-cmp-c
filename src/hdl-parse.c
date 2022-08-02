@@ -190,9 +190,9 @@ int _HDL_ParseDataToBlocks (char *data) {
 
     // Allocate data_buffer to the length of data
 
-    dalloc = sizeof(char) * len;
+    dalloc = sizeof(char) * len * 2;
     // TODO: data_buffer reallocation: Allocate double length, because reallocation does not work yet
-    data_buffer = malloc(dalloc * 2);
+    data_buffer = malloc(dalloc);
 
     if(data_buffer == NULL) {
         // Out of memory
@@ -661,16 +661,40 @@ int _HDL_ParseImage (struct HDL_Document *doc, int *blockIndex) {
     bmp->height = atoi(blocks[*blockIndex]);
     // Closing parenthesis
     (*blockIndex)++;
+    if(blocks[*blockIndex][0] == ',') {
+        // Spritesheet values
+        (*blockIndex)++;
+        bmp->sprite_width = atoi(blocks[*blockIndex]);
+        (*blockIndex)++;
+        if(blocks[*blockIndex][0] != ',') {
+            printf("(width, height, sprite_width, sprite_height) expected while defining image\r\n");
+            return 1;
+        }
+        (*blockIndex)++;
+        bmp->sprite_height = atoi(blocks[*blockIndex]);
+        (*blockIndex)++;
+    }
+    else {
+        bmp->sprite_height = bmp->height;
+        bmp->sprite_width = bmp->width;
+    }
+
     if(blocks[*blockIndex][0] != ')') {
         printf("Missing parenthesis while defining image\r\n");
         return 1;
     }
+
+    (*blockIndex)++;
+
+    if(blocks[*blockIndex][0] == '"') {
+        // Bitmap from .bmp
+        return _HDL_ParseImageFromPath(bmp, doc, blockIndex);
+    }
+
     bmp->size = (bmp->width + 7)/8 * bmp->height;
     // Allocate and zero data buffer
     bmp->data = malloc(bmp->size);
     memset(bmp->data, 0, bmp->size);
-
-    (*blockIndex)++;
 
     int y = 0;
     int x = 0;
@@ -734,6 +758,8 @@ int _HDL_ParseVariable (struct HDL_Document *doc, int *blockIndex) {
             return 1;
         }
         struct HDL_Variable *_var = &doc->vars[doc->varCount++];
+
+        memset(_var, 0, sizeof(struct HDL_Variable));
 
         _var->isConst = 1;
         // Copy name to variable

@@ -116,6 +116,13 @@ int HDL_BitmapFromBMP (const char *filename, struct HDL_Bitmap *bitmap) {
     bitmap->height = bmp_header.imageHeader.imageHeight;
     bitmap->size = row_l * bitmap->height;
 
+    // Set sprite width, height if not set
+    if(bitmap->sprite_width == 0)
+        bitmap->sprite_width = bitmap->width;
+
+    if(bitmap->sprite_height == 0) 
+        bitmap->sprite_height = bitmap->height;
+
     bitmap->data = malloc(bitmap->size);
     memset(bitmap->data, 0, bitmap->size);
     
@@ -124,9 +131,11 @@ int HDL_BitmapFromBMP (const char *filename, struct HDL_Bitmap *bitmap) {
         fread(bitmap->data + (row_l * i), 1, row_l, file);
 
         // Invert color
+        /*
         for(int x = 0; x < row_l; x++) {
             (bitmap->data + (row_l * i))[x] = ~(bitmap->data + (row_l * i))[x];
         }
+        */
         if(row_l != row_l_pad) {
             // Skip padding
             fseek(file, row_l_pad - row_l, SEEK_CUR);

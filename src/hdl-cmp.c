@@ -23,8 +23,10 @@
 char input_file_path[128];
 
 const char *tagnames[] = {
+    // Box - standard middle center aligned flex element
     "box",
-    "text"
+    // Switch - element that switches child disabled state according to "value" attribute
+    "switch"
 };
 enum HDL_AttrIndex {
     HDL_ATTR_X          = 0, // X position
@@ -38,7 +40,9 @@ enum HDL_AttrIndex {
     HDL_ATTR_PADDING    = 8, // Padding
     HDL_ATTR_ALIGN      = 9, // Content alignment
     HDL_ATTR_SIZE       = 10, // Bitmap/font size
-    HDL_ATTR_DISABLED   = 11  // Disabled
+    HDL_ATTR_DISABLED   = 11, // Disabled
+    HDL_ATTR_VALUE      = 12, // Value
+    HDL_ATTR_SPRITE     = 13, // Sprite index
 };
 
 const char *attrnames[] = {
@@ -53,7 +57,9 @@ const char *attrnames[] = {
     "padding",
     "align",
     "size",
-    "disabled"
+    "disabled",
+    "value",
+    "sprite"
 };
 
 const char *alignment_x[] = {
@@ -282,6 +288,10 @@ int compileBitmap (struct HDL_Document *doc, struct HDL_Bitmap *bmp, uint8_t *bu
     (*pc) += 2;
     *(uint16_t*)&buffer[*pc] = bmp->height;
     (*pc) += 2;
+    *(uint8_t*)&buffer[*pc] = bmp->sprite_width;
+    (*pc) += 1;
+    *(uint8_t*)&buffer[*pc] = bmp->sprite_height;
+    (*pc) += 1;
 
     buffer[*pc] = bmp->colorMode;
     (*pc) += 1;
