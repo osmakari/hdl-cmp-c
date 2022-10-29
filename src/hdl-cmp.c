@@ -378,7 +378,10 @@ void writeCFile (struct HDL_Document *doc, FILE *file, int original_size, int co
         
         fprintf(file, "// HDL output file\n// Original size: %iB, Compiled size: %iB\n\n", original_size, len);
 
-        fprintf(file, "// Output\nunsigned char HDL_PAGE_OUTPUT[%i] = {\n", len);
+        fprintf(file, "// HDL output size\n");
+        fprintf(file, "const unsigned long HDL_PAGE_SIZE = %i;\n", len);
+
+        fprintf(file, "// Output\nunsigned char HDL_PAGE_OUTPUT[HDL_PAGE_SIZE] = {\n", len);
 
         if(!comment) {
             for(int i = 0; i < len; i++) {

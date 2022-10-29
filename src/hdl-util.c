@@ -56,10 +56,11 @@ struct __attribute__((packed)) _BMP_Head {
 // Print bitmap info
 void _HDL_PrintBitmapInfo (struct _BMP_Head *header) {
 
-    printf("Bitmap info: \n\tWidth: %i \n\tHeight: %i\n\tBits per pixel: %i\n", 
+    printf("Bitmap info: \n\tWidth: %i \n\tHeight: %i\n\tBits per pixel: %i\n\tOffset: %i\n", 
         header->imageHeader.imageWidth, 
         header->imageHeader.imageHeight, 
-        header->imageHeader.bitsPerPixel);
+        header->imageHeader.bitsPerPixel,
+        header->fileHeader.pixelOffset);
 }
 
 int HDL_BitmapFromBMP (const char *filename, struct HDL_Bitmap *bitmap) {
@@ -127,7 +128,7 @@ int HDL_BitmapFromBMP (const char *filename, struct HDL_Bitmap *bitmap) {
     memset(bitmap->data, 0, bitmap->size);
     
     fseek(file, bmp_header.fileHeader.pixelOffset, SEEK_SET);
-    for(int i = bitmap->height - 1; i > 0; i--) {
+    for(int i = bitmap->height - 1; i >= 0; i--) {
         fread(bitmap->data + (row_l * i), 1, row_l, file);
 
         // Invert color
