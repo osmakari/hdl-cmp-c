@@ -93,6 +93,7 @@ enum HDL_ColorSpace {
 
 struct HDL_Bitmap {
     char name[32];
+    uint16_t id;
     uint16_t size;
     uint16_t width;
     uint16_t height;

@@ -4,6 +4,7 @@
 #include "hdl-parse.h"
 #include <math.h>
 #include "hdl-cmp.h"
+#include "hdl-util.h"
 
 // Unknown file format
 #define HDL_COMPILER_OUTPUT_FORMAT_UNKNOWN 0xFF
@@ -11,6 +12,8 @@
 #define HDL_COMPILER_OUTPUT_FORMAT_BIN  0
 // C source file
 #define HDL_COMPILER_OUTPUT_FORMAT_C    1
+// C source file image
+#define HDL_COMPILER_OUTPUT_FORMAT_BMP_C 2
 
 // Maximum output file buffer size
 #define HDL_COMPILER_OUTPUT_BUFFER_SIZE 4096
@@ -43,6 +46,7 @@ enum HDL_AttrIndex {
     HDL_ATTR_DISABLED   = 11, // Disabled
     HDL_ATTR_VALUE      = 12, // Value
     HDL_ATTR_SPRITE     = 13, // Sprite index
+    HDL_ATTR_WIDGET     = 14, // Widget
 };
 
 const char *attrnames[] = {
@@ -59,7 +63,8 @@ const char *attrnames[] = {
     "size",
     "disabled",
     "value",
-    "sprite"
+    "sprite",
+    "widget"
 };
 
 const char *alignment_x[] = {
@@ -201,31 +206,37 @@ int compileElement (struct HDL_Document *doc, struct HDL_Element *element, uint8
             int type_addr = (*pc);
             buffer[(*pc)++] = element->attrs[i].type;
             buffer[(*pc)++] = element->attrs[i].count;
+
             switch(element->attrs[i].type) {
                 case HDL_TYPE_NULL:
                 {
                     buffer[(*pc)++] = 0;
                     break;
                 }
-                case HDL_TYPE_IMG:
                 case HDL_TYPE_BOOL:
                 case HDL_TYPE_BIND:
                 {
                     buffer[(*pc)++] = *(uint8_t*)val;
                     break;
                 }
+                case HDL_TYPE_IMG:
+                {
+                    buffer[(*pc)] = *(uint16_t*)val;
+                    (*pc) += 2;
+                    break;
+                }
                 case HDL_TYPE_FLOAT:
                 {
                     // Optimize value
-                    float _mod = fmodf(*(float*)&buffer[*pc], 1);
+                    float _mod = fmodf(*(float*)val, 1);
                     uint8_t ntype = HDL_TYPE_FLOAT;
                     if(_mod == 0) {
-                        int32_t nval = (int32_t)*(float*)&buffer[*pc];
+                        float nval = fabsf(*(float*)val);
                         // Integer
-                        if(nval < 0x80 && nval > -0x80) {
+                        if(nval < 0x100) {
                             ntype = HDL_TYPE_I8;
                         }
-                        else if(nval < 0x8000 && nval > -0x8000) {
+                        else if(nval < 0x10000) {
                             ntype = HDL_TYPE_I16;
                         }
                         else {
@@ -249,6 +260,7 @@ int compileElement (struct HDL_Document *doc, struct HDL_Element *element, uint8
                             case HDL_TYPE_I16:
                             {
                                 *(int16_t*)&buffer[*pc] = (int16_t)((float*)val)[z];
+
                                 (*pc) += sizeof(int16_t);
                                 break;
                             }
@@ -282,6 +294,8 @@ int compileElement (struct HDL_Document *doc, struct HDL_Element *element, uint8
 }
 
 int compileBitmap (struct HDL_Document *doc, struct HDL_Bitmap *bmp, uint8_t *buffer, int *pc) {
+    *(uint16_t*)&buffer[*pc] = bmp->id;
+    (*pc) += 2;
     *(uint16_t*)&buffer[*pc] = bmp->size;
     (*pc) += 2;
     *(uint16_t*)&buffer[*pc] = bmp->width;
@@ -366,7 +380,23 @@ void writeBinFile (struct HDL_Document *doc, FILE *file, int original_size) {
 
 }
 
-void writeCFile (struct HDL_Document *doc, FILE *file, int original_size, int comment) {
+void writeCFile (struct HDL_Document *doc, FILE *file, const char *filename, int original_size, int comment) {
+
+    // Get base name from file
+    char *f_cpy = malloc(strlen(filename) + 1);
+    strcpy(f_cpy, filename);
+    f_cpy[strlen(filename)] = 0;
+    const char *f_ptr = f_cpy;
+    for(int i = strlen(f_cpy) - 1; i > 0; i--) {
+        if(f_cpy[i] == '/') {
+            f_ptr = &f_cpy[i + 1];
+            break;
+        }
+        if(f_cpy[i] == '.' || f_cpy[i] == '-') {
+            f_cpy[i] = '_';
+        }
+    }
+
     int len = 0;
 
     if(compile(doc, output_buffer, &len)) {
@@ -379,9 +409,9 @@ void writeCFile (struct HDL_Document *doc, FILE *file, int original_size, int co
         fprintf(file, "// HDL output file\n// Original size: %iB, Compiled size: %iB\n\n", original_size, len);
 
         fprintf(file, "// HDL output size\n");
-        fprintf(file, "const unsigned long HDL_PAGE_SIZE = %i;\n", len);
+        fprintf(file, "const unsigned long HDL_PAGE_SIZE_%s = %i;\n", f_ptr, len);
 
-        fprintf(file, "// Output\nunsigned char HDL_PAGE_OUTPUT[HDL_PAGE_SIZE] = {\n", len);
+        fprintf(file, "// Output\nunsigned char HDL_PAGE_%s[] = {\n", f_ptr);
 
         if(!comment) {
             for(int i = 0; i < len; i++) {
@@ -396,6 +426,8 @@ void writeCFile (struct HDL_Document *doc, FILE *file, int original_size, int co
             }
         }
         else {
+            // NOTE: NOT CURRENTLY WORKING
+            printf("NOTE: NOT CURRECTLY COMPILING CORRECTLY!!!\n");
             // Commented version
             int i = 0;
             // File format version
@@ -499,6 +531,53 @@ void writeCFile (struct HDL_Document *doc, FILE *file, int original_size, int co
         fputs("\n};\n\n", file);
 
     }
+
+    free(f_cpy);
+}
+
+void writeBMPCFile (FILE *file, const char *filename, struct HDL_Bitmap *bmp) {
+    // Get base name from file
+    char *f_cpy = malloc(strlen(filename) + 1);
+    strcpy(f_cpy, filename);
+    f_cpy[strlen(filename)] = 0;
+    const char *f_ptr = f_cpy;
+    for(int i = strlen(f_cpy) - 1; i > 0; i--) {
+        if(f_cpy[i] == '/') {
+            f_ptr = &f_cpy[i + 1];
+            break;
+        }
+        if(f_cpy[i] == '.' || f_cpy[i] == '-') {
+            f_cpy[i] = '_';
+        }
+    }
+    int len = 0;
+    compileBitmap(NULL, bmp, output_buffer, &len);
+
+    fprintf(file, "// Filename: %s\n", f_ptr);
+    fprintf(file, "// Width: %i Height: %i Sprite width: %i Sprite height: %i\n", bmp->width, bmp->height, bmp->sprite_width, bmp->sprite_height);
+    fprintf(file, "// File size\n");
+    fprintf(file, "const unsigned long HDL_IMG_SIZE_%s = %i;\n", f_ptr, len);
+    fprintf(file, "// File output\n");
+    fprintf(file, "const unsigned char HDL_IMG_%s[] = {\n", f_ptr);
+    
+
+    for(int i = 0; i < len; i++) {
+        fprintf(file, "0x%02X", output_buffer[i]);
+        if(i != len - 1) {
+            fputs(", ", file);
+        }
+        if((i + 1) % 16 == 0) {
+            // Newline after every 16 bytes
+            fputc('\n', file);
+        }
+    }
+
+    fprintf(file, "\n};\n");
+
+
+    
+
+    free(f_cpy);
 }
 
 /**
@@ -512,9 +591,10 @@ void printHelp () {
     printf("Options:\r\n");
     printf("\t-h\t\tPrint this help\r\n");
     printf("\t-o <file>\t\tOutput file path\r\n");
-    printf("\t-f <format>\t\tForce output format: 'bin'(binary file) or 'c'(C source file)\r\n");
+    printf("\t-f <format>\t\tForce output format: 'bin'(binary file), 'c'(C source file), 'bmpc'(BMP C source file)\r\n");
     printf("\t-c\t\tComment the output file\r\n");
-
+    printf("\t-x <width>\t\tWidth of a sprite\r\n");
+    printf("\t-y <height>\t\tHeight of a sprite\r\n");
 }
 
 
@@ -534,10 +614,16 @@ int main (int argc, char *argv[]) {
     // Comment output file
     uint8_t arg_comment = 0;
 
+    uint16_t argf_width = 0;
+    uint16_t argf_height = 0;
+
+
     /*
         0: expect file or option
         1: expect output file path
         2: expect file format
+        3: expect sprite width
+        4: expect sprite height
     */
     uint8_t arg_state = 0;
     for(int i = 1; i < argc; i++) {
@@ -570,6 +656,18 @@ int main (int argc, char *argv[]) {
                         {   
                             // Output file format
                             arg_state = 2;
+                            break;
+                        }
+                        case 'x':
+                        {
+                            // Sprite width
+                            arg_state = 3;
+                            break;
+                        }
+                        case 'y':
+                        {
+                            // Sprite width
+                            arg_state = 4;
                             break;
                         }
                     }
@@ -613,10 +711,26 @@ int main (int argc, char *argv[]) {
                     // C source file
                     argf_format = HDL_COMPILER_OUTPUT_FORMAT_C;
                 }
+                else if(strcmp(argv[i], "bmpc") == 0) {
+                    // BMP C Source file
+                    argf_format = HDL_COMPILER_OUTPUT_FORMAT_BMP_C;
+                }
                 else {
                     printf("Error: Unknown output format: '%s'\r\n", argv[i]);
                     return 1;
                 }
+                arg_state = 0;
+                break;
+            }
+            case 3:
+            {
+                argf_width = atoi(argv[i]);
+                arg_state = 0;
+                break;
+            }
+            case 4:
+            {
+                argf_height = atoi(argv[i]);
                 arg_state = 0;
                 break;
             }
@@ -632,12 +746,59 @@ int main (int argc, char *argv[]) {
         printf("Error: Expected an input file\r\n");
         return 1;
     }
+
+    // Detect format from file extension
+    if(argf_format == HDL_COMPILER_OUTPUT_FORMAT_UNKNOWN && argf_fpath != NULL) {
+        char *extension = NULL;
+        char *outputFile = argf_fpath;
+        for(int i = strlen(outputFile) - 1; i > 0; i--) {
+            if(outputFile[i] == '.') {
+                extension = (char*)outputFile + i;
+            }
+        }
+
+        if(strcmp(extension, ".bin") == 0) {
+            argf_format = HDL_COMPILER_OUTPUT_FORMAT_BIN;
+        }
+        else if(strcmp(extension, ".c") == 0) {
+
+            argf_format = HDL_COMPILER_OUTPUT_FORMAT_C;
+        }
+        else if(strcmp(extension, ".bmp.c") == 0) {
+            argf_format = HDL_COMPILER_OUTPUT_FORMAT_BMP_C;
+        }
+    }
+    else {
+        
+    }
+
+    if(argf_format == HDL_COMPILER_OUTPUT_FORMAT_C || argf_format == HDL_COMPILER_OUTPUT_FORMAT_BMP_C) {
+        char *extension = NULL;
+        char *inputFile = filename;
+        for(int i = strlen(inputFile) - 1; i > 0; i--) {
+            if(inputFile[i] == '.') {
+                extension = (char*)inputFile + i;
+            }
+        }
+        if(strcmp(extension, ".bmp") == 0) {
+            argf_format = HDL_COMPILER_OUTPUT_FORMAT_BMP_C;
+        }
+        else if(argf_format == HDL_COMPILER_OUTPUT_FORMAT_BMP_C) {
+            printf("Invalid input file format: must be .bmp\n");
+            return 1;
+        }
+    }
+
     input_file_path[0] = 0;
-    // Set filename path
-    for(int i = strlen(filename) - 1; i > 0; i--) {
-        if(filename[i] == '/') {
-            memcpy(input_file_path, filename, i + 1);
-            input_file_path[i + 1] = 0;
+
+    if(argf_format != HDL_COMPILER_OUTPUT_FORMAT_BMP_C) {
+        // Set filename path
+        for(int i = strlen(filename) - 1; i > 0; i--) {
+            if(filename[i] == '/') {
+                memcpy(input_file_path, filename, i + 1);
+                input_file_path[i + 1] = 0;
+                break;
+            }
         }
     }
     
@@ -673,71 +834,95 @@ int main (int argc, char *argv[]) {
 
     fclose(f);
 
-    // Parse file
-    struct HDL_Document doc;
+    if(argf_format == HDL_COMPILER_OUTPUT_FORMAT_BMP_C) {
+        // Parse image
+        struct HDL_Bitmap bmp;
+        if(argf_width != 0) {
+            bmp.sprite_width = argf_width;
+        }
+        if(argf_height != 0) {
+            bmp.sprite_height = argf_height;
+        }
 
-    int err = HDL_Parse(buffer, &doc);
-    if(!err) {
-        int depth = 0;
-        //_HDL_PrintBlocks();
-        //HDL_PrintVars(&doc);
-        //HDL_PrintElement(&doc, &doc.elements[0], depth);
-    }
-    else {
-        printf("Parse failed\r\n");
-        free(buffer);
+        int err = HDL_BitmapFromBMP(filename, &bmp);
 
-        return 1;
-    }
 
-    free(buffer);
+        if(err) {
+            printf("BMP Parse failed \r\n");
+            free(buffer);
+            return 1;
+        }
 
-    // Detect format from file extension
-    if(argf_format == HDL_COMPILER_OUTPUT_FORMAT_UNKNOWN && argf_fpath != NULL) {
-        char *extension = NULL;
-        char *inputFile = argf_fpath;
-        for(int i = strlen(inputFile) - 1; i > 0; i--) {
-            if(inputFile[i] == '.') {
-                extension = (char*)inputFile + i;
+        // Write output file
+        if(argf_fpath != NULL) {
+            
+            FILE *fo = fopen(argf_fpath, "w");
+
+            if(fo == NULL) {
+                printf("Could not open '%s' for writing\r\n", argf_fpath);
+                return 1;
             }
-        }
 
-        if(strcmp(extension, ".bin") == 0) {
-            argf_format = HDL_COMPILER_OUTPUT_FORMAT_BIN;
-        }
-        else if(strcmp(extension, ".c") == 0) {
-            argf_format = HDL_COMPILER_OUTPUT_FORMAT_C;
-        }
-    }
+            writeBMPCFile(fo, argf_fpath, &bmp);
 
-
-    // Write output file
-    if(argf_fpath != NULL) {
-
-        if(argf_format == HDL_COMPILER_OUTPUT_FORMAT_UNKNOWN) {
-            printf("Unknown file output format\r\n");
-            return 1;
-        }
-
-        FILE *fo = fopen(argf_fpath, "w");
-
-        if(fo == NULL) {
-            printf("Could not open '%s' for writing\r\n", argf_fpath);
-            return 1;
-        }
-
-        if(argf_format == HDL_COMPILER_OUTPUT_FORMAT_BIN) {
-            writeBinFile(&doc, fo, filesize);
+            fclose(fo);
         }
         else {
-            writeCFile(&doc, fo, filesize, arg_comment);
+            // TODO: Output file not set
+            printf("Output file not set\r\n");
         }
 
-        fclose(fo);
+        free(buffer);
     }
     else {
-        // TODO: Output file not set
-        printf("Output file not set\r\n");
+        // Parse file
+        struct HDL_Document doc;
+
+        int err = HDL_Parse(buffer, &doc);
+        if(!err) {
+            int depth = 0;
+            //_HDL_PrintBlocks();
+            //HDL_PrintVars(&doc);
+            //HDL_PrintElement(&doc, &doc.elements[0], depth);
+        }
+        else {
+            printf("Parse failed\r\n");
+            free(buffer);
+
+            return 1;
+        }
+
+        free(buffer);
+
+
+        // Write output file
+        if(argf_fpath != NULL) {
+
+            if(argf_format == HDL_COMPILER_OUTPUT_FORMAT_UNKNOWN) {
+                printf("Unknown file output format\r\n");
+                return 1;
+            }
+
+            FILE *fo = fopen(argf_fpath, "w");
+
+            if(fo == NULL) {
+                printf("Could not open '%s' for writing\r\n", argf_fpath);
+                return 1;
+            }
+
+            if(argf_format == HDL_COMPILER_OUTPUT_FORMAT_BIN) {
+                writeBinFile(&doc, fo, filesize);
+            }
+            else {
+                writeCFile(&doc, fo, filename, filesize, arg_comment);
+            }
+
+            fclose(fo);
+        }
+        else {
+            // TODO: Output file not set
+            printf("Output file not set\r\n");
+        }
     }
 
     return 0;

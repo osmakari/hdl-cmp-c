@@ -41,7 +41,7 @@ uint8_t HDL_TYPE_SIZES[HDL_TYPE_COUNT] = {
     1, /* HDL_TYPE_I8 */
     2, /* HDL_TYPE_I16 */
     4, /* HDL_TYPE_I32 */
-    1, /* HDL_TYPE_IMG */
+    2, /* HDL_TYPE_IMG */
     1, /* HDL_TYPE_BIND */
 };
 
@@ -446,6 +446,18 @@ int _HDL_ParseValue (struct HDL_Document *doc, int *blockIndex, uint8_t *len_out
             return 1;
         }
     }
+    else if(blocks[*blockIndex][0] == '0' && blocks[*blockIndex][1] == 'x') {
+        // Hex string
+        int32_t val = strtol(&(blocks[*blockIndex][2]), NULL, 16);
+
+        // Save as float, compiler will optimize it to the correct size
+        *len_out = 1;
+        *type_out = HDL_TYPE_FLOAT;
+        if(*val_out == NULL) {
+            *val_out = malloc(sizeof(float));
+        }
+        *(float*)(*val_out) = val;
+    }
     else if(isNumberString(blocks[*blockIndex])) {
         // Save as float, compiler will optimize it to the correct size
         *len_out = 1;
@@ -544,9 +556,9 @@ int _HDL_ParseValue (struct HDL_Document *doc, int *blockIndex, uint8_t *len_out
                     *len_out = 1;
                     *type_out = HDL_TYPE_IMG;
                     if(*val_out == NULL) {
-                        *val_out = malloc(1);
+                        *val_out = malloc(2);
                     }
-                    *(uint8_t*)(*val_out) = i;
+                    *(uint16_t*)(*val_out) = i;
                     f = 1;
                     break;
                 }
@@ -598,7 +610,6 @@ int _HDL_ParseAttribute (struct HDL_Document *doc, struct HDL_Element *element, 
     if(blocks[*blockIndex][0] == '=') {
         (*blockIndex)++;
         if(_HDL_ParseValue(doc, blockIndex, &attr->count, &attr->type, &attr->value)) {
-            
             return 1;
         }
     }
@@ -625,7 +636,9 @@ int _HDL_ParseImage (struct HDL_Document *doc, int *blockIndex) {
         doc->bitmapAllocCount += HDL_DOC_BITMAPS_INITIAL_SIZE;
         doc->bitmaps = realloc(doc->bitmaps, sizeof(struct HDL_Bitmap) * doc->bitmapAllocCount);
     }
-    struct HDL_Bitmap *bmp = &doc->bitmaps[doc->bitmapCount++];
+    struct HDL_Bitmap *bmp = &doc->bitmaps[doc->bitmapCount];
+    bmp->id = doc->bitmapCount;
+    doc->bitmapCount++;
 
     // First block should be the name of the image
     if(isDelimiter(blocks[*blockIndex][0])) {
